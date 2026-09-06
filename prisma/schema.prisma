@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  USER
+}
+
+enum InvitationStatus {
+  UNUSED
+  USED
+  DISABLED
+}
+
+enum MachineStatus {
+  ACTIVE        // vises som Ledig/Booket afhængig af aktive bookinger
+  OUT_OF_ORDER  // Ude af drift
+  DISABLED      // Deaktiveret / skjult
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+enum BookingVisibility {
+  FULL_NAME   // Andre ser fulde navn
+  FIRST_NAME  // Andre ser kun fornavn
+  HIDDEN      // Andre ser kun at den er booket, ikke af hvem
+}
+
+model User {
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  phone           String?
+  passwordHash    String
+  role            Role     @default(USER)
+  canManageUsers  Boolean  @default(false) // ekstra rettighed en Admin kan få af Superadmin
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  invitationsCreated Invitation[] @relation("InvitationCreatedBy")
+  invitationUsed     Invitation?  @relation("InvitationUsedBy")
+  machinesCreated    Machine[]    @relation("MachineCreatedBy")
+  bookings           Booking[]
+}
+
+model Invitation {
+  id          String            @id @default(cuid())
+  code        String            @unique
+  status      InvitationStatus  @default(UNUSED)
+  grantsRole  Role              @default(USER)
+  createdById String
+  createdBy   User              @relation("InvitationCreatedBy", fields: [createdById], references: [id])
+  usedById    String?           @unique
+  usedBy      User?             @relation("InvitationUsedBy", fields: [usedById], references: [id])
+  createdAt   DateTime          @default(now())
+  usedAt      DateTime?
+}
+
+model Machine {
+  id                 String        @id @default(cuid())
+  name               String
+  type               String?
+  description        String?
+  imageUrl           String?
+  registrationNumber String?
+  status             MachineStatus @default(ACTIVE)
+  createdById        String
+  createdBy          User          @relation("MachineCreatedBy", fields: [createdById], references: [id])
+  createdAt          DateTime      @default(now())
+
+  bookings Booking[]
+
+  @@index([status])
+}
+
+model Booking {
+  id         String            @id @default(cuid())
+  machineId  String
+  machine    Machine           @relation(fields: [machineId], references: [id])
+  userId     String
+  user       User              @relation(fields: [userId], references: [id])
+  startTime  DateTime
+  endTime    DateTime
+  status     BookingStatus     @default(CONFIRMED)
+  visibility BookingVisibility @default(FULL_NAME)
+  createdAt  DateTime          @default(now())
+
+  @@index([machineId, startTime, endTime])
+}
